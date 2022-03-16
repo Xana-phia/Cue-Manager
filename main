@@ -1,0 +1,261 @@
+#Mark Hanna (and Ian?)
+#February 27, 2022- March 1
+
+import tkinter as tk
+from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
+from functools import partial
+from re import findall
+from tkinter import simpledialog
+from tkinter import messagebox
+from ttkbootstrap import Style
+
+#Sets the starting window and display values
+style = Style(theme='darkly')
+root = style.master
+root.title("Cue Tracker")
+root.geometry("500x300")
+
+
+cueOn = tk.BooleanVar()
+lightOn = tk.BooleanVar()
+stage_managerOn = tk.BooleanVar()
+assistant_stage_managerOn = tk.BooleanVar()
+cueOn.set(False)
+lightOn.set(False)
+stage_managerOn.set(False)
+assistant_stage_managerOn.set(False)
+
+settings = False
+
+lighting = []
+
+# something important with google drive or docs or something
+scope = ["https://spreadsheets.google.com/feeds",
+         'https://www.googleapis.com/auth/spreadsheets',
+         "https://www.googleapis.com/auth/drive.file",
+         "https://www.googleapis.com/auth/drive",
+         'https://www.googleapis.com/auth/documents.readonly']
+
+# credentials for google drive
+creds = ServiceAccountCredentials.from_json_keyfile_name("downloadedJSON.json", scope)
+
+# im not really sure
+service = build('docs', 'v1', credentials=creds)
+
+# the document id (this is the same as )
+DOCUMENT_ID = '1OxZn0MKg6uqWYS_VLAnEeTm4NYliI0mHLvLsE_p55CA'
+
+# getting the contents from the docs service
+document = service.documents().get(documentId=DOCUMENT_ID).execute()
+
+# get a google doc object
+documentContent = document.get('body')['content']
+cueInfoChunk = """"""
+
+# list of all cues
+allCues = {}
+allCueNumbers = []
+
+index = 0
+cueName = "None"
+
+class Cue:
+
+    def __init__(self):
+        self.cue = tk.Label(root, text="Cue")
+        self.light = tk.Label(root, text="Light")
+        self.stage_manager = tk.Label(root, text="Stage Manager")
+        self.assistant_stage_manager = tk.Label(root, text="Ass. State Manager")
+        self.cue_print = False
+        self.light_print = True
+        self.stage_manager_print = False
+        self.assistant_stage_manager_print = False
+
+    def showCue(self):
+        if cueOn.get():
+            self.cue.pack()
+            self.cue_print = True
+        else:
+            self.cue.pack_forget()
+
+    def showLight(self):
+        if lightOn.get():
+            self.light.pack()
+            self.light_print = True
+        else:
+            self.light.pack_forget()
+
+    def showSM(self):
+        if stage_managerOn.get():
+            self.stage_manager.pack()
+            self.stage_manager_print = True
+        else:
+            self.stage_manager.pack_forget()
+
+    def showASM(self):
+        if assistant_stage_managerOn.get():
+            self.assistant_stage_manager.pack()
+            self.assistant_stage_manager_print = True
+        else:
+            self.assistant_stage_manager.pack_forget()
+
+cue = Cue()
+
+def findLights(loc):
+    global light_start
+    global light_end
+    global lighting
+    lighting = []
+    iteration = 0
+    light_end = int(cueInfoChunk.find('\n'))
+    while light_end <= loc:
+        if light_end < loc:
+            light_end = cueInfoChunk.find('\n', iteration, iteration + 3)
+            iteration += 1
+    light_start = cueInfoChunk.find('\n', light_end - iteration, light_end)
+
+# splice the document object
+for i in documentContent:
+
+    # characters in i
+    if "paragraph" in i:
+
+        # loop through the line
+        for element in i['paragraph']['elements']:
+
+            # line break
+            if element['textRun']['content'] == "\n":
+
+                # add the sub number
+                cueInfoChunk += "subNum: " + str(index) + "\n"
+
+                # light cue
+                if cue.light_print:
+                    if "Lights:" in cueInfoChunk:
+                        lightLocation = cueInfoChunk.find('Lights:') - 11
+                        findLights(lightLocation)
+                        amount = light_end - light_start
+                        #amount *= -1
+                        print(light_start, light_end)
+                        print(amount)
+                        a = light_start
+                        for a in range(light_start, light_end, 1):
+                            lighting.append(cueInfoChunk[a])
+                        print(lighting, 'LIGHTING')
+                        # add cue info to allCues
+                        allCues[cueName] = cueInfoChunk
+                        allCueNumbers.append(cueName)
+
+                        # increase the sub number
+                        index += 1
+                if cue.cue_print:
+                    if "Cue:" in cueInfoChunk:
+                        pass
+
+                cueInfoChunk = """"""
+                continue
+
+            # found new cue number
+            if "Cue " in element['textRun']['content']:
+
+                # set name of the cue to just the cue number
+                cueName = findall('[0-9]+', element['textRun']['content'])[0]
+                cueInfoChunk = """"""
+
+            # add string to something
+            cueInfoChunk += element['textRun']['content']
+
+def findCue(event):
+    global cueIndex, cueLabel
+
+    # cue that user wants to skip to
+    thisCue = simpledialog.askstring("Find Cue", "Enter Cue Number: ", parent=root)
+
+    # user might try to enter a cue that doesn't exist
+    try:
+
+        # remove anything that isn't a number
+        thisCue = findall('[0-9]+', thisCue)[0]
+
+        # set the cueIndex to the index where thisCue, a string, is located.
+        cueIndex = allCueNumbers.index(thisCue)
+
+        # change the current cue
+        cueLabel['text'] = allCues[thisCue]
+
+    # cue doesn't exist in dictionary
+    except ValueError:
+        messagebox.showerror("Cue Search Error", "That cue does not exist! \nOr does not fulfill your filter requirements!")
+
+
+def changeCue(goForward, other):
+    global cueIndex, cueLabel
+    # want to go forward
+    if goForward:
+        cueIndex += 1
+        newCueString = allCues[allCueNumbers[cueIndex]]
+
+    # want to go back
+    else:
+        cueIndex -= 1
+        newCueString = allCues[allCueNumbers[cueIndex]]
+
+    cueLabel['text'] = newCueString
+
+#Toggles the display of the checkbox list
+def buttons(display):
+    global settings
+    settingsLabel.pack()
+    settingsFrame.pack()
+    if settings:
+        settingsLabel.pack_forget()
+        settingsFrame.pack_forget()
+    else:
+        settingsLabel.pack()
+        settingsFrame.pack()
+    settings = not settings
+
+settingsFrame = tk.Frame(master=root)
+settingsLabel = tk.Label(master=settingsFrame, text="Select which cues you want to see.", font=("Helvetica", 14))
+
+
+
+#Defines the buttons
+cue_button = tk.Checkbutton(settingsFrame, text="Show Cue?", variable=cueOn, onvalue=1, offvalue=0, command=cue.showCue)
+cue_button.pack()
+
+light_button = tk.Checkbutton(settingsFrame, text="Show Lights Cues?", variable=lightOn, command=cue.showLight)
+light_button.pack()
+
+stage_manager_button = tk.Checkbutton(settingsFrame, text="Stage Manager Cues?", variable=stage_managerOn, command=cue.showSM)
+stage_manager_button.pack()
+
+assistant_stage_manager_button = tk.Checkbutton(settingsFrame, text="Assistant stage_manager Cues?", variable=assistant_stage_managerOn, command=cue.showASM)
+assistant_stage_manager_button.pack()
+
+cueIndex = 0
+
+countLightFromMe = "Cue 10"
+
+mainFrame = tk.Frame(master=root)
+mainFrame.pack()
+cueLabel = tk.Label(master=mainFrame, text=allCues[allCueNumbers[cueIndex]])
+
+root.bind('<Left>', partial(changeCue, False))
+root.bind('<Right>', partial(changeCue, True)) #Move through/between the cues
+root.bind('n', partial(changeCue, True))
+root.bind('f', findCue) #Find a cue
+root.bind('s', buttons) #Choose the cues to see (filters)
+cueLabel.pack()
+root.mainloop()
+
+"""
+while True:
+
+    thisCue = input("Cue: ")
+    try:
+        print(allCues[thisCue])
+    except KeyError:
+        print("Lights are not effected by that cue \n")
+"""
